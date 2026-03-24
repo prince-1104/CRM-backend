@@ -1,5 +1,4 @@
 from fastapi import FastAPI
-
 import models
 from database import Base, engine
 from routes import admin, public
