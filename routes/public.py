@@ -1,7 +1,8 @@
+import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,9 @@ from catalog_categories import PRODUCT_CATALOG_CATEGORIES
 from database import get_db
 from services import leads as lead_service
 from services import products as product_service
+from services import r2_storage as r2_storage_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -79,3 +83,32 @@ def list_catalog_categories() -> list[str]:
 def list_products(db: Session = Depends(get_db)) -> list[schemas.CatalogProductResponse]:
     rows = product_service.list_products(db)
     return [schemas.CatalogProductResponse.model_validate(r) for r in rows]
+
+
+@router.get("/catalog/media/{key:path}")
+def get_public_catalog_media(key: str) -> Response:
+    """
+    Serve catalog images without exposing R2 credentials to the browser.
+    Use when the r2.dev / public URL returns 401 (bucket not public).
+    """
+    try:
+        body, content_type = r2_storage_service.get_catalog_object(key)
+    except ValueError as exc:
+        msg = str(exc)
+        if "is not configured" in msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Image storage is not configured",
+            ) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Image not found") from None
+    except Exception:
+        logger.exception("public catalog media fetch failed")
+        raise HTTPException(status_code=500, detail="Failed to load image") from None
+
+    return Response(
+        content=body,
+        media_type=content_type or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=600"},
+    )
