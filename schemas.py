@@ -239,3 +239,38 @@ class AdminSettingsPatchRequest(BaseModel):
     maps_defaults: dict | None = None
     business: dict | None = None
     export: dict | None = None
+
+
+class CatalogProductBase(BaseModel):
+    sku: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1, max_length=255)
+    category: str | None = Field(None, max_length=100)
+    description: str | None = Field(None, max_length=5000)
+    image_url: str | None = Field(None, max_length=1024)
+    active: bool = True
+
+
+class CatalogProductCreateRequest(CatalogProductBase):
+    pass
+
+
+class CatalogProductUpdateRequest(BaseModel):
+    sku: str | None = Field(None, min_length=1, max_length=100)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    category: str | None = Field(None, max_length=100)
+    description: str | None = Field(None, max_length=5000)
+    image_url: str | None = Field(None, max_length=1024)
+    active: bool | None = None
+
+
+class CatalogProductResponse(CatalogProductBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CatalogImageUploadResponse(BaseModel):
+    key: str
+    url: str

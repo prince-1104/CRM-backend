@@ -14,12 +14,86 @@ TEXT_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
 DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 
 
-def list_products() -> list[dict[str, Any]]:
-    return [
-        {"sku": "SU-CH-001", "name": "Chef Coat Pro", "active": True},
-        {"sku": "SU-HT-002", "name": "Hotel Frontdesk Set", "active": True},
-        {"sku": "SU-RS-003", "name": "Restaurant Service Set", "active": True},
-    ]
+DEFAULT_CATALOG_PRODUCTS = [
+    {
+        "sku": "SU-CH-001",
+        "name": "Chef Coat Pro",
+        "category": "Chef",
+        "description": None,
+        "image_url": None,
+        "active": True,
+    },
+    {
+        "sku": "SU-HT-002",
+        "name": "Hotel Frontdesk Set",
+        "category": "Hotel",
+        "description": None,
+        "image_url": None,
+        "active": True,
+    },
+    {
+        "sku": "SU-RS-003",
+        "name": "Restaurant Service Set",
+        "category": "Restaurant",
+        "description": None,
+        "image_url": None,
+        "active": True,
+    },
+]
+
+
+def seed_catalog_defaults_if_empty(db: Session) -> None:
+    existing = db.query(func.count(models.CatalogProduct.id)).scalar() or 0
+    if existing:
+        return
+    for row in DEFAULT_CATALOG_PRODUCTS:
+        db.add(models.CatalogProduct(**row))
+    db.commit()
+
+
+def list_products(db: Session, only_active: bool = True) -> list[models.CatalogProduct]:
+    seed_catalog_defaults_if_empty(db)
+    q = db.query(models.CatalogProduct).order_by(models.CatalogProduct.id.asc())
+    if only_active:
+        q = q.filter(models.CatalogProduct.active.is_(True))
+    return q.all()
+
+
+def list_products_admin(db: Session) -> list[models.CatalogProduct]:
+    seed_catalog_defaults_if_empty(db)
+    return db.query(models.CatalogProduct).order_by(models.CatalogProduct.id.asc()).all()
+
+
+def create_catalog_product(db: Session, payload: dict[str, Any]) -> models.CatalogProduct:
+    row = models.CatalogProduct(**payload)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def update_catalog_product(
+    db: Session,
+    product_id: int,
+    payload: dict[str, Any],
+) -> models.CatalogProduct | None:
+    row = db.query(models.CatalogProduct).filter(models.CatalogProduct.id == product_id).first()
+    if not row:
+        return None
+    for key, value in payload.items():
+        setattr(row, key, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def delete_catalog_product(db: Session, product_id: int) -> bool:
+    row = db.query(models.CatalogProduct).filter(models.CatalogProduct.id == product_id).first()
+    if not row:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
 
 
 def _fetch_place_details(client: httpx.Client, place_id: str) -> dict[str, Any]:

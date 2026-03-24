@@ -69,5 +69,5 @@ def submit_lead(
 
 
 @router.get("/products")
-def list_products():
-    return product_service.list_products()
+def list_products(db: Session = Depends(get_db)):
+    return product_service.list_products(db)

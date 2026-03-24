@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime, timezone
 from io import BytesIO, StringIO
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from services import google_maps_service
 from services import team_service as team_service
 from services.google_maps_service import GoogleMapsAPIError
 from services import leads as lead_service, products as product_service
+from services import r2_storage as r2_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -662,6 +663,85 @@ def maps_regions(
 @router.get("/maps/categories")
 def maps_categories(_: str = Depends(auth.get_current_admin)) -> list[str]:
     return MAPS_CATEGORY_LIST
+
+
+@router.get("/catalog/products", response_model=list[schemas.CatalogProductResponse])
+def get_catalog_products(
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> list[schemas.CatalogProductResponse]:
+    rows = product_service.list_products_admin(db)
+    return [schemas.CatalogProductResponse.model_validate(r) for r in rows]
+
+
+@router.post("/catalog/products", response_model=schemas.CatalogProductResponse)
+def create_catalog_product(
+    payload: schemas.CatalogProductCreateRequest,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> schemas.CatalogProductResponse:
+    row = product_service.create_catalog_product(db, payload.model_dump())
+    return schemas.CatalogProductResponse.model_validate(row)
+
+
+@router.patch("/catalog/products/{product_id}", response_model=schemas.CatalogProductResponse)
+def patch_catalog_product(
+    product_id: int,
+    payload: schemas.CatalogProductUpdateRequest,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> schemas.CatalogProductResponse:
+    body = payload.model_dump(exclude_unset=True)
+    if not body:
+        raise HTTPException(status_code=422, detail="Provide at least one field to update")
+    row = product_service.update_catalog_product(db, product_id, body)
+    if not row:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return schemas.CatalogProductResponse.model_validate(row)
+
+
+@router.delete("/catalog/products/{product_id}")
+def remove_catalog_product(
+    product_id: int,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    ok = product_service.delete_catalog_product(db, product_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {"deleted": True}
+
+
+@router.post("/catalog/upload-image", response_model=schemas.CatalogImageUploadResponse)
+async def upload_catalog_image(
+    file: UploadFile = File(...),
+    _: str = Depends(auth.get_current_admin),
+) -> schemas.CatalogImageUploadResponse:
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Allowed: jpg, png, webp, gif",
+        )
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be <= 10MB")
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    try:
+        result = r2_storage_service.upload_catalog_image(
+            content=content,
+            filename=file.filename or "upload.bin",
+            content_type=file.content_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception:
+        logger.exception("catalog image upload failed")
+        raise HTTPException(status_code=500, detail="Failed to upload image")
+
+    return schemas.CatalogImageUploadResponse(key=result["key"], url=result["url"])
 
 
 @router.patch(
