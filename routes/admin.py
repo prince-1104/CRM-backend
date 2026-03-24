@@ -4,12 +4,13 @@ from datetime import date, datetime, timezone
 from io import BytesIO, StringIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 
 import auth
 import schemas
+from catalog_categories import PRODUCT_CATALOG_CATEGORIES
 from database import get_db
 from services import app_settings as app_settings_service
 from services import google_maps_service
@@ -665,6 +666,11 @@ def maps_categories(_: str = Depends(auth.get_current_admin)) -> list[str]:
     return MAPS_CATEGORY_LIST
 
 
+@router.get("/catalog/categories")
+def get_catalog_product_categories(_: str = Depends(auth.get_current_admin)) -> list[str]:
+    return list(PRODUCT_CATALOG_CATEGORIES)
+
+
 @router.get("/catalog/products", response_model=list[schemas.CatalogProductResponse])
 def get_catalog_products(
     _: str = Depends(auth.get_current_admin),
@@ -742,6 +748,32 @@ async def upload_catalog_image(
         raise HTTPException(status_code=500, detail="Failed to upload image")
 
     return schemas.CatalogImageUploadResponse(key=result["key"], url=result["url"])
+
+
+@router.get("/catalog/media/{key:path}")
+def get_catalog_media(
+    key: str,
+    _: str = Depends(auth.get_current_admin),
+) -> Response:
+    """
+    Authenticated image bytes for admin previews. Browser <img> to public r2.dev
+    often fails when the bucket is private or the public base URL is wrong.
+    """
+    try:
+        body, content_type = r2_storage_service.get_catalog_object(key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Image not found") from None
+    except Exception:
+        logger.exception("catalog media fetch failed")
+        raise HTTPException(status_code=500, detail="Failed to load image") from None
+
+    return Response(
+        content=body,
+        media_type=content_type or "application/octet-stream",
+        headers={"Cache-Control": "private, max-age=300"},
+    )
 
 
 @router.patch(

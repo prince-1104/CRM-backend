@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import schemas
+from catalog_categories import PRODUCT_CATALOG_CATEGORIES
 from database import get_db
 from services import leads as lead_service
 from services import products as product_service
@@ -68,6 +70,12 @@ def submit_lead(
     )
 
 
-@router.get("/products")
-def list_products(db: Session = Depends(get_db)):
-    return product_service.list_products(db)
+@router.get("/catalog-categories")
+def list_catalog_categories() -> list[str]:
+    return list(PRODUCT_CATALOG_CATEGORIES)
+
+
+@router.get("/products", response_model=list[schemas.CatalogProductResponse])
+def list_products(db: Session = Depends(get_db)) -> list[schemas.CatalogProductResponse]:
+    rows = product_service.list_products(db)
+    return [schemas.CatalogProductResponse.model_validate(r) for r in rows]

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator
 
 
 class LeadResponse(BaseModel):
@@ -251,7 +251,16 @@ class CatalogProductBase(BaseModel):
 
 
 class CatalogProductCreateRequest(CatalogProductBase):
-    pass
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category_create(cls, v: object) -> str | None:
+        from catalog_categories import validate_catalog_category
+
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return validate_catalog_category(str(v))
 
 
 class CatalogProductUpdateRequest(BaseModel):
@@ -262,6 +271,17 @@ class CatalogProductUpdateRequest(BaseModel):
     image_url: str | None = Field(None, max_length=1024)
     active: bool | None = None
 
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category_update(cls, v: object) -> str | None:
+        from catalog_categories import validate_catalog_category
+
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return validate_catalog_category(str(v))
+
 
 class CatalogProductResponse(CatalogProductBase):
     id: int
@@ -269,6 +289,12 @@ class CatalogProductResponse(CatalogProductBase):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("category")
+    def serialize_category(self, value: str | None) -> str | None:
+        from catalog_categories import display_category
+
+        return display_category(value)
 
 
 class CatalogImageUploadResponse(BaseModel):

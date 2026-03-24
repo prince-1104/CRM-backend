@@ -26,7 +26,7 @@ DEFAULT_CATALOG_PRODUCTS = [
     {
         "sku": "SU-HT-002",
         "name": "Hotel Frontdesk Set",
-        "category": "Hotel",
+        "category": "Hotels",
         "description": None,
         "image_url": None,
         "active": True,
@@ -34,7 +34,7 @@ DEFAULT_CATALOG_PRODUCTS = [
     {
         "sku": "SU-RS-003",
         "name": "Restaurant Service Set",
-        "category": "Restaurant",
+        "category": "Restaurants",
         "description": None,
         "image_url": None,
         "active": True,
