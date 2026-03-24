@@ -105,6 +105,24 @@ class AppSetting(Base):
     value_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
 
 
+class CatalogCategoryProfile(Base):
+    """Rich catalogue metadata for admin + client showcase (cover, SKU prefix, CTA)."""
+
+    __tablename__ = "catalog_category_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    sku_prefix: Mapped[str] = mapped_column(String(24), nullable=False, default="")
+    cover_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    badge_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    cta_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class CatalogProduct(Base):
     __tablename__ = "catalog_products"
     __table_args__ = (

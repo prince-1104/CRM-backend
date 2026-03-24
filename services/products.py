@@ -3,10 +3,12 @@ from typing import Any
 
 import httpx
 from sqlalchemy import asc, desc, func, nulls_last, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import models
 from services import app_settings as app_settings_svc
+from services import catalog_category_list as catalog_categories_merged
 from services import google_maps_service
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
@@ -65,9 +67,18 @@ def list_products_admin(db: Session) -> list[models.CatalogProduct]:
 
 
 def create_catalog_product(db: Session, payload: dict[str, Any]) -> models.CatalogProduct:
-    row = models.CatalogProduct(**payload)
+    body = dict(payload)
+    if "category" in body:
+        body["category"] = catalog_categories_merged.resolve_catalog_category_for_product(
+            db, body.get("category")
+        )
+    row = models.CatalogProduct(**body)
     db.add(row)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("A product with this SKU already exists.") from None
     db.refresh(row)
     return row
 
@@ -80,9 +91,18 @@ def update_catalog_product(
     row = db.query(models.CatalogProduct).filter(models.CatalogProduct.id == product_id).first()
     if not row:
         return None
-    for key, value in payload.items():
+    body = dict(payload)
+    if "category" in body:
+        body["category"] = catalog_categories_merged.resolve_catalog_category_for_product(
+            db, body.get("category")
+        )
+    for key, value in body.items():
         setattr(row, key, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("A product with this SKU already exists.") from None
     db.refresh(row)
     return row
 

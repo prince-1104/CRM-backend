@@ -7,10 +7,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import schemas
-from catalog_categories import PRODUCT_CATALOG_CATEGORIES
 from database import get_db
 from services import leads as lead_service
 from services import products as product_service
+from services import catalog_category_list as catalog_category_list_service
+from services import catalog_category_profiles as catalog_category_profiles_service
 from services import r2_storage as r2_storage_service
 
 logger = logging.getLogger(__name__)
@@ -75,8 +76,21 @@ def submit_lead(
 
 
 @router.get("/catalog-categories")
-def list_catalog_categories() -> list[str]:
-    return list(PRODUCT_CATALOG_CATEGORIES)
+def list_catalog_categories(db: Session = Depends(get_db)) -> list[str]:
+    return catalog_category_list_service.list_merged_catalog_categories(db)
+
+
+@router.get(
+    "/catalog/catalogues",
+    response_model=list[schemas.CatalogueCardResponse],
+)
+def list_catalogue_cards_public(
+    db: Session = Depends(get_db),
+) -> list[schemas.CatalogueCardResponse]:
+    rows = catalog_category_profiles_service.list_catalogue_cards(
+        db, only_active_products=True
+    )
+    return [schemas.CatalogueCardResponse.model_validate(r) for r in rows]
 
 
 @router.get("/products", response_model=list[schemas.CatalogProductResponse])

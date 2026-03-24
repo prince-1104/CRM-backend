@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 import auth
 import schemas
-from catalog_categories import PRODUCT_CATALOG_CATEGORIES
 from database import get_db
 from services import app_settings as app_settings_service
+from services import catalog_category_list as catalog_category_list_service
+from services import catalog_category_profiles as catalog_category_profiles_service
 from services import google_maps_service
 from services import team_service as team_service
 from services.google_maps_service import GoogleMapsAPIError
@@ -667,8 +668,76 @@ def maps_categories(_: str = Depends(auth.get_current_admin)) -> list[str]:
 
 
 @router.get("/catalog/categories")
-def get_catalog_product_categories(_: str = Depends(auth.get_current_admin)) -> list[str]:
-    return list(PRODUCT_CATALOG_CATEGORIES)
+def get_catalog_product_categories(
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> list[str]:
+    return catalog_category_list_service.list_merged_catalog_categories(db)
+
+
+@router.post("/catalog/categories", response_model=schemas.CatalogCategoryResponse)
+def create_catalog_product_category(
+    payload: schemas.CatalogCategoryCreateRequest,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> schemas.CatalogCategoryResponse:
+    try:
+        name = catalog_category_list_service.add_extra_catalog_category(db, payload.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    all_cats = catalog_category_list_service.list_merged_catalog_categories(db)
+    return schemas.CatalogCategoryResponse(name=name, categories=all_cats)
+
+
+@router.get(
+    "/catalog/catalogues",
+    response_model=list[schemas.CatalogueCardResponse],
+)
+def list_catalogue_cards_admin(
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> list[schemas.CatalogueCardResponse]:
+    rows = catalog_category_profiles_service.list_catalogue_cards(
+        db, only_active_products=False
+    )
+    return [schemas.CatalogueCardResponse.model_validate(r) for r in rows]
+
+
+@router.put(
+    "/catalog/catalogues",
+    response_model=schemas.CatalogueCardResponse,
+)
+def upsert_catalogue(
+    payload: schemas.CatalogueUpsertRequest,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> schemas.CatalogueCardResponse:
+    try:
+        saved = catalog_category_profiles_service.upsert_catalogue(
+            db, payload.model_dump()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    rows = catalog_category_profiles_service.list_catalogue_cards(
+        db, only_active_products=False
+    )
+    canon = saved.name.strip().lower()
+    for r in rows:
+        if r["name"].lower() == canon:
+            return schemas.CatalogueCardResponse.model_validate(r)
+    raise HTTPException(status_code=500, detail="Catalogue saved but could not reload")
+
+
+@router.delete("/catalog/catalogues/{profile_id}")
+def delete_catalogue_profile(
+    profile_id: int,
+    _: str = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    ok = catalog_category_profiles_service.delete_catalogue_profile(db, profile_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Catalogue profile not found")
+    return {"deleted": True}
 
 
 @router.get("/catalog/products", response_model=list[schemas.CatalogProductResponse])
@@ -686,7 +755,10 @@ def create_catalog_product(
     _: str = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ) -> schemas.CatalogProductResponse:
-    row = product_service.create_catalog_product(db, payload.model_dump())
+    try:
+        row = product_service.create_catalog_product(db, payload.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return schemas.CatalogProductResponse.model_validate(row)
 
 
@@ -700,7 +772,10 @@ def patch_catalog_product(
     body = payload.model_dump(exclude_unset=True)
     if not body:
         raise HTTPException(status_code=422, detail="Provide at least one field to update")
-    row = product_service.update_catalog_product(db, product_id, body)
+    try:
+        row = product_service.update_catalog_product(db, product_id, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not row:
         raise HTTPException(status_code=404, detail="Product not found")
     return schemas.CatalogProductResponse.model_validate(row)

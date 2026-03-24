@@ -250,17 +250,22 @@ class CatalogProductBase(BaseModel):
     active: bool = True
 
 
+def _strip_optional_category(v: object) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, str) and not v.strip():
+        return None
+    s = str(v).strip()
+    if len(s) > 100:
+        raise ValueError("Category must be at most 100 characters")
+    return s
+
+
 class CatalogProductCreateRequest(CatalogProductBase):
     @field_validator("category", mode="before")
     @classmethod
     def normalize_category_create(cls, v: object) -> str | None:
-        from catalog_categories import validate_catalog_category
-
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
-        return validate_catalog_category(str(v))
+        return _strip_optional_category(v)
 
 
 class CatalogProductUpdateRequest(BaseModel):
@@ -274,13 +279,39 @@ class CatalogProductUpdateRequest(BaseModel):
     @field_validator("category", mode="before")
     @classmethod
     def normalize_category_update(cls, v: object) -> str | None:
-        from catalog_categories import validate_catalog_category
+        return _strip_optional_category(v)
 
-        if v is None:
-            return None
-        if isinstance(v, str) and not v.strip():
-            return None
-        return validate_catalog_category(str(v))
+
+class CatalogCategoryCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+class CatalogCategoryResponse(BaseModel):
+    name: str
+    categories: list[str]
+
+
+class CatalogueCardResponse(BaseModel):
+    """Single catalogue for admin grid + public showcase."""
+
+    id: int | None = None
+    name: str
+    sku_prefix: str
+    cover_image_url: str | None = None
+    badge_label: str | None = None
+    cta_label: str | None = None
+    sort_order: int = 0
+    product_count: int = 0
+    preview_product_names: list[str] = Field(default_factory=list)
+
+
+class CatalogueUpsertRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    sku_prefix: str = Field("", max_length=24)
+    cover_image_url: str | None = Field(None, max_length=1024)
+    badge_label: str | None = Field(None, max_length=80)
+    cta_label: str | None = Field(None, max_length=80)
+    sort_order: int = 0
 
 
 class CatalogProductResponse(CatalogProductBase):
