@@ -1,0 +1,47 @@
+@import url("https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .glass-card {
+    background: rgba(34, 38, 47, 0.4);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(161, 250, 255, 0.05);
+  }
+
+  .neon-glow-primary {
+    @apply transition-all duration-500;
+  }
+
+  .neon-glow-primary:hover {
+    box-shadow: 0 0 20px rgba(161, 250, 255, 0.15);
+    border-color: rgba(161, 250, 255, 0.3);
+  }
+
+  .neon-glow-secondary {
+    @apply transition-all duration-500;
+  }
+
+  .neon-glow-secondary:hover {
+    box-shadow: 0 0 20px rgba(216, 115, 255, 0.15);
+    border-color: rgba(216, 115, 255, 0.3);
+  }
+
+  .material-symbols-outlined {
+    font-family: "Material Symbols Outlined";
+    font-weight: normal;
+    font-style: normal;
+    font-size: 1.25rem;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+  }
+}
