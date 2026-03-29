@@ -1,4 +1,8 @@
+import os
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 import models
 from database import Base, engine
 from db_schema_ensure import ensure_maps_business_ai_columns, ensure_maps_business_geo_columns
@@ -9,6 +13,20 @@ app = FastAPI(
     description="Lead generation backend for Star Uniform platform.",
     version="0.1.0",
 )
+
+_cors_origins = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(public.router, prefix="/api/public", tags=["public"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])

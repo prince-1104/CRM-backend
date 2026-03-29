@@ -20,7 +20,7 @@ DEFAULT_CATALOG_PRODUCTS = [
     {
         "sku": "SU-CH-001",
         "name": "Chef Coat Pro",
-        "category": "Chef",
+        "category": "Catering",
         "description": None,
         "image_url": None,
         "active": True,

@@ -59,9 +59,11 @@ def _category_name_aliases(name: str) -> list[str]:
     for alias in aliases:
         if alias and alias not in deduped:
             deduped.append(alias)
-    # Bar was merged into Catering; keep alias so profiles/products still resolve.
-    if base == "catering" and "bar" not in deduped:
-        deduped.append("bar")
+    # Bar and Chef catalogues were merged into Catering; keep aliases for profiles/products.
+    if base == "catering":
+        for legacy in ("bar", "chef"):
+            if legacy not in deduped:
+                deduped.append(legacy)
     return deduped
 
 

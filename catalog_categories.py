@@ -4,7 +4,6 @@
 PRODUCT_CATALOG_CATEGORIES: tuple[str, ...] = (
     "Hotels",
     "Restaurants",
-    "Chef",
     "Catering",
 )
 
@@ -15,7 +14,7 @@ _LEGACY_TO_CANONICAL: dict[str, str] = {
     "restaurant": "Restaurants",
     "restaurants": "Restaurants",
     "bar": "Catering",
-    "chef": "Chef",
+    "chef": "Catering",
     "catering": "Catering",
 }
 
