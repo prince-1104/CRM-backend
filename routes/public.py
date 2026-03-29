@@ -12,6 +12,7 @@ from services import leads as lead_service
 from services import products as product_service
 from services import catalog_category_list as catalog_category_list_service
 from services import catalog_category_profiles as catalog_category_profiles_service
+from services import app_settings as app_settings_service
 from services import r2_storage as r2_storage_service
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,25 @@ def submit_lead(
             "lead_id": lead.id,
             "message": "Quote request received. Our team will contact you shortly.",
         },
+    )
+
+
+@router.get("/storefront", response_model=schemas.StorefrontPublicResponse)
+def get_storefront_public(db: Session = Depends(get_db)) -> schemas.StorefrontPublicResponse:
+    raw = app_settings_service.get_setting_dict(
+        db, "business_info", app_settings_service.DEFAULT_BUSINESS_INFO
+    )
+
+    def s(key: str) -> str:
+        v = raw.get(key)
+        return str(v).strip() if v is not None else ""
+
+    return schemas.StorefrontPublicResponse(
+        business_name=s("business_name"),
+        phone=s("phone"),
+        whatsapp=s("whatsapp"),
+        email=s("email"),
+        address=s("address"),
     )
 
 

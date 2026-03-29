@@ -55,6 +55,8 @@ class MapsBusiness(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     google_place_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -73,6 +75,11 @@ class MapsBusiness(Base):
         String(50), nullable=False, default="not_contacted"
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lead_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_last_updated: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
 
 
 class AdminUser(Base):

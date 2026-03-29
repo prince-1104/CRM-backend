@@ -40,6 +40,7 @@ CATEGORY_TO_PLACE_TYPE: dict[str, str] = {
     "lodging": "lodging",
     "bar": "bar",
     "cafe": "cafe",
+    "catering": "catering",
 }
 
 
@@ -82,15 +83,47 @@ async def search_businesses_by_region(
     location = f"{coords['lat']},{coords['lng']}"
     radius_m = max(1, radius_km) * 1000
 
+    return await search_businesses_by_location(
+        location=location,
+        category=category,
+        radius_m=radius_m,
+    )
+
+
+async def search_businesses_by_location(
+    *,
+    location: str,
+    category: str,
+    radius_m: int,
+) -> list[dict[str, Any]]:
+    """
+    Nearby Search for an explicit center point.
+
+    Args:
+      location: "lat,lng"
+      category: UI category key (restaurants/lodging/bar/cafe)
+      radius_m: radius in meters
+
+    Returns list of dicts:
+      name, address, phone, website, rating, review_count, place_id, lat, lng
+    """
+    if not GOOGLE_MAPS_API_KEY:
+        raise GoogleMapsAPIError("GOOGLE_MAPS_API_KEY is not configured")
+
+    cat_key = category.strip().lower()
+    place_type = CATEGORY_TO_PLACE_TYPE.get(cat_key)
+    if not place_type:
+        raise GoogleMapsAPIError(f"Unsupported category: {category}")
+
     aggregated: list[dict[str, Any]] = []
     next_page_token: str | None = None
     max_pages = 5
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        for _ in range(max_pages):
+        for page_idx in range(max_pages):
             params: dict[str, Any] = {
                 "location": location,
-                "radius": radius_m,
+                "radius": int(max(1, radius_m)),
                 "type": place_type,
                 "key": GOOGLE_MAPS_API_KEY,
             }
@@ -104,21 +137,25 @@ async def search_businesses_by_region(
 
             if status == "OVER_QUERY_LIMIT":
                 raise GoogleMapsAPIError(
-                    "Google Places API rate limit reached. Try again later."
+                    f"Nearby Search page {page_idx+1}/{max_pages}: rate limit reached. Try again later."
                 )
             if status == "REQUEST_DENIED":
                 raise GoogleMapsAPIError(
-                    payload.get("error_message") or "Places API request denied"
+                    f"Nearby Search page {page_idx+1}/{max_pages}: {payload.get('error_message') or 'Places API request denied'}"
                 )
             if status not in ("OK", "ZERO_RESULTS"):
                 raise GoogleMapsAPIError(
-                    f"Places Nearby Search failed: {status} — {payload.get('error_message', '')}"
+                    f"Nearby Search page {page_idx+1}/{max_pages} failed: {status} — {payload.get('error_message', '')}"
                 )
 
             for item in payload.get("results", []):
                 pid = item.get("place_id")
                 if not pid:
                     continue
+                geom = item.get("geometry") or {}
+                loc = geom.get("location") or {}
+                lat = loc.get("lat")
+                lng = loc.get("lng")
                 vic = item.get("vicinity")
                 r = item.get("rating")
                 urt = item.get("user_ratings_total")
@@ -131,13 +168,17 @@ async def search_businesses_by_region(
                         "rating": float(r) if r is not None else None,
                         "review_count": urt,
                         "place_id": pid,
+                        "lat": float(lat) if lat is not None else None,
+                        "lng": float(lng) if lng is not None else None,
+                        "types": item.get("types") or [],
                     }
                 )
 
             next_page_token = payload.get("next_page_token")
             if not next_page_token:
                 break
-            await asyncio.sleep(2.1)
+            # next_page_token requires a short delay before it can be used
+            await asyncio.sleep(2.5)
 
     return aggregated
 
@@ -263,6 +304,8 @@ def _save_businesses_to_db_sync(
         existing = _find_existing(db, place_id, phone_clean)
         rating = raw.get("rating")
         rc = raw.get("review_count")
+        lat = raw.get("lat")
+        lng = raw.get("lng")
 
         if existing:
             existing.name = raw.get("name") or existing.name
@@ -275,6 +318,12 @@ def _save_businesses_to_db_sync(
             existing.review_count = (
                 int(rc) if rc is not None else existing.review_count
             )
+            existing.latitude = (
+                float(lat) if lat is not None else existing.latitude
+            )
+            existing.longitude = (
+                float(lng) if lng is not None else existing.longitude
+            )
             existing.region = region
             existing.category = category
             updated += 1
@@ -282,6 +331,8 @@ def _save_businesses_to_db_sync(
             db.add(
                 models.MapsBusiness(
                     google_place_id=place_id,
+                    latitude=float(lat) if lat is not None else None,
+                    longitude=float(lng) if lng is not None else None,
                     name=raw.get("name") or "Unknown",
                     address=raw.get("address"),
                     phone=phone_clean,
@@ -334,25 +385,41 @@ async def test_places_api_connection() -> tuple[bool, str]:
         return False, "No default region configured"
     location = f"{coords['lat']},{coords['lng']}"
     async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.get(
-            NEARBY_SEARCH_URL,
-            params={
-                "location": location,
-                "radius": 500,
-                "type": "restaurant",
-                "key": GOOGLE_MAPS_API_KEY,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
-        st = payload.get("status")
-        if st in ("OK", "ZERO_RESULTS"):
-            return True, f"Places API OK ({st})"
-        if st == "REQUEST_DENIED":
-            return False, payload.get("error_message") or "REQUEST_DENIED"
-        if st == "OVER_QUERY_LIMIT":
-            return False, "Rate limit — try again later"
-        return False, f"Unexpected status: {st}"
+        try:
+            response = await client.get(
+                NEARBY_SEARCH_URL,
+                params={
+                    "location": location,
+                    "radius": 500,
+                    "type": "restaurant",
+                    "key": GOOGLE_MAPS_API_KEY,
+                },
+            )
+            response.raise_for_status()
+            payload = response.json()
+            st = payload.get("status")
+            if st in ("OK", "ZERO_RESULTS"):
+                return True, f"Places API OK ({st})"
+            if st == "REQUEST_DENIED":
+                return False, payload.get("error_message") or "REQUEST_DENIED"
+            if st == "OVER_QUERY_LIMIT":
+                return False, "Rate limit — try again later"
+            return False, f"Unexpected status: {st}"
+        except httpx.HTTPStatusError as e:
+            # Include response body to reveal REQUEST_DENIED / API_KEY errors (debug only).
+            body = ""
+            try:
+                body = e.response.text
+            except Exception:
+                body = ""
+            print("GOOGLE ERROR:", repr(e))
+            return (
+                False,
+                f"HTTP {e.response.status_code}: {body or str(e)}",
+            )
+        except Exception as e:
+            print("GOOGLE ERROR:", repr(e))
+            return False, str(e)
 
 
 __all__ = [

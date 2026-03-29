@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import models
 from database import Base, engine
+from db_schema_ensure import ensure_maps_business_ai_columns, ensure_maps_business_geo_columns
 from routes import admin, public
 
 app = FastAPI(
@@ -17,6 +18,8 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 def startup() -> None:
     # Keep schema creation simple for scaffold/dev mode.
     Base.metadata.create_all(bind=engine)
+    ensure_maps_business_geo_columns(engine)
+    ensure_maps_business_ai_columns(engine)
 
 
 @app.get("/health")

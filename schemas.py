@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_serializer, field_validator
 
 
 class LeadResponse(BaseModel):
@@ -106,6 +106,23 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class AdminBootstrapRequest(BaseModel):
+    """One-time first admin: requires ADMIN_BOOTSTRAP_SECRET; only works while no admins exist."""
+
+    bootstrap_secret: str = Field(..., min_length=1)
+    email: EmailStr
+
+
+class AdminBootstrapCompleteRequest(BaseModel):
+    token: str = Field(..., min_length=20)
+    password: str = Field(..., min_length=8)
+
+
+class BootstrapRequestResponse(BaseModel):
+    status: Literal["sent"] = "sent"
+    detail: str = "If the request was valid, a setup link was sent to that address."
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -114,6 +131,8 @@ class TokenResponse(BaseModel):
 class MapsBusinessResponse(BaseModel):
     id: int
     google_place_id: str | None
+    latitude: float | None = None
+    longitude: float | None = None
     name: str
     address: str | None
     phone: str | None
@@ -127,8 +146,26 @@ class MapsBusinessResponse(BaseModel):
     is_converted_to_lead: bool
     contact_status: str
     notes: str | None
+    ai_confidence: float | None = None
+    ai_type: str | None = None
+    lead_score: float | None = None
+    ai_last_updated: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_hot_lead(self) -> bool:
+        if (self.ai_confidence or 0) < 70:
+            return False
+        ai_type = self.ai_type or ""
+        if (
+            ai_type.startswith("rejected:")
+            or ai_type.startswith("rejected_type:")
+            or ai_type == "filtered_junk"
+        ):
+            return False
+        return (self.lead_score or 0) > 90
 
 
 class ConvertedToLeadRequest(BaseModel):
@@ -161,9 +198,50 @@ class NotesUpdateRequest(BaseModel):
 
 
 class MapsCollectionScrapeRequest(BaseModel):
-    region: str = Field(..., min_length=2, max_length=100)
+    region: str | None = Field(default=None, min_length=2, max_length=100)
     category: str = Field(..., min_length=2, max_length=100)
     radius_km: int = Field(default=15, ge=5, le=50)
+    lat: float | None = None
+    lng: float | None = None
+
+    @field_validator("lat", "lng")
+    @classmethod
+    def _finite_coords(cls, v: float | None) -> float | None:
+        if v is None:
+            return None
+        if v != v:  # NaN
+            raise ValueError("Coordinate must be finite")
+        return float(v)
+
+    @field_validator("region")
+    @classmethod
+    def _strip_region(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        return s or None
+
+    @field_validator("category")
+    @classmethod
+    def _strip_category(cls, v: str) -> str:
+        return str(v).strip()
+
+    @field_validator("radius_km")
+    @classmethod
+    def _round_radius_km(cls, v: int) -> int:
+        return int(v)
+
+    @field_validator("lng", mode="after")
+    @classmethod
+    def _require_region_or_coords(cls, lng: float | None, info):
+        data = info.data or {}
+        lat = data.get("lat")
+        region = data.get("region")
+        if region is None and (lat is None or lng is None):
+            raise ValueError("Provide either region, or lat+lng")
+        if (lat is None) != (lng is None):
+            raise ValueError("Provide both lat and lng together")
+        return lng
 
 
 class MapsBusinessPutRequest(BaseModel):
@@ -180,7 +258,7 @@ class MapsExportPostRequest(BaseModel):
 
     region: str | None = None
     category: str | None = None
-    file_format: Literal["csv", "excel"] = Field(default="csv", alias="format")
+    file_format: Literal["csv", "excel", "pdf"] = Field(default="csv", alias="format")
 
 
 class MapsRegionResponse(BaseModel):
@@ -218,6 +296,18 @@ class LeadDailyPoint(BaseModel):
     count: int
 
 
+class AIScoringRequest(BaseModel):
+    region: str | None = None
+    category: str | None = None
+
+
+class AIScoringResponse(BaseModel):
+    status: str
+    ai_validated: int
+    total_processed: int
+    message: str
+
+
 class MapsTestConnectionResponse(BaseModel):
     ok: bool
     message: str
@@ -239,6 +329,16 @@ class AdminSettingsPatchRequest(BaseModel):
     maps_defaults: dict | None = None
     business: dict | None = None
     export: dict | None = None
+
+
+class StorefrontPublicResponse(BaseModel):
+    """Safe subset of business info for the public marketing site."""
+
+    business_name: str = ""
+    phone: str = ""
+    whatsapp: str = ""
+    email: str = ""
+    address: str = ""
 
 
 class CatalogProductBase(BaseModel):

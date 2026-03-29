@@ -16,7 +16,16 @@ else:
     # or rely on the driver default when the URI already includes it.
     connect_args = {}
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+# Neon/serverless Postgres often closes idle TLS connections; without pre-ping the pool
+# hands out dead sockets and you get "SSL connection has been closed unexpectedly".
+_engine_kwargs: dict = {"connect_args": connect_args}
+if not DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["pool_pre_ping"] = True
+    _engine_kwargs["pool_recycle"] = int(
+        os.getenv("DB_POOL_RECYCLE_SECONDS", "280")
+    )
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

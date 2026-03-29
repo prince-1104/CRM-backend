@@ -38,6 +38,7 @@ DEFAULT_EXPORT_PREFS: dict[str, Any] = {
 DEFAULT_BUSINESS_INFO: dict[str, Any] = {
     "business_name": "",
     "phone": "",
+    "whatsapp": "",
     "email": "",
     "address": "",
     "revenue_display": "",

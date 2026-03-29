@@ -39,6 +39,59 @@ def _profiles_by_name_lower(db: Session) -> dict[str, models.CatalogCategoryProf
     return {r.name.strip().lower(): r for r in rows}
 
 
+def _category_name_aliases(name: str) -> list[str]:
+    """
+    Build lightweight singular/plural aliases so near-duplicate category names
+    (for example: Hotel vs Hotels) can share one saved profile.
+    """
+    base = name.strip().lower()
+    if not base:
+        return []
+    aliases = [base]
+    if base.endswith("ies") and len(base) > 3:
+        aliases.append(f"{base[:-3]}y")
+    elif base.endswith("s") and len(base) > 1:
+        aliases.append(base[:-1])
+    else:
+        aliases.append(f"{base}s")
+        aliases.append(f"{base}es")
+    deduped: list[str] = []
+    for alias in aliases:
+        if alias and alias not in deduped:
+            deduped.append(alias)
+    # Bar was merged into Catering; keep alias so profiles/products still resolve.
+    if base == "catering" and "bar" not in deduped:
+        deduped.append("bar")
+    return deduped
+
+
+def _resolve_profile_for_category(
+    profiles_by_name: dict[str, models.CatalogCategoryProfile],
+    category_name: str,
+) -> models.CatalogCategoryProfile | None:
+    for key in _category_name_aliases(category_name):
+        row = profiles_by_name.get(key)
+        if row:
+            return row
+    return None
+
+
+def _products_for_category_name(
+    prods_by_lower: dict[str, list[models.CatalogProduct]],
+    category_name: str,
+) -> list[models.CatalogProduct]:
+    """Gather products whose category matches this catalogue name or a singular/plural alias."""
+    seen: set[int] = set()
+    out: list[models.CatalogProduct] = []
+    for key in _category_name_aliases(category_name):
+        for p in prods_by_lower.get(key, []):
+            token = p.id if p.id is not None else id(p)
+            if token not in seen:
+                seen.add(token)
+                out.append(p)
+    return out
+
+
 def list_catalogue_cards(
     db: Session, *, only_active_products: bool
 ) -> list[dict]:
@@ -47,9 +100,8 @@ def list_catalogue_cards(
     prods = _products_by_category_lower(db, only_active=only_active_products)
     cards: list[dict] = []
     for name in names:
-        k = name.lower()
-        row = prof.get(k)
-        plist = prods.get(k, [])
+        row = _resolve_profile_for_category(prof, name)
+        plist = _products_for_category_name(prods, name)
         prefix = (
             (row.sku_prefix.strip() if row and row.sku_prefix else "") or derived_sku_prefix(name)
         )

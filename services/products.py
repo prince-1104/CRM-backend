@@ -331,6 +331,8 @@ def query_maps_businesses_paginated(
     contact_status: str | None = None,
     rating_min: float | None = None,
     is_converted_to_lead: bool | None = None,
+    lead_score_min: float | None = None,
+    ai_validated: bool | None = None,
 ) -> tuple[list[models.MapsBusiness], int]:
     q = db.query(models.MapsBusiness)
     if region:
@@ -343,6 +345,13 @@ def query_maps_businesses_paginated(
         q = q.filter(models.MapsBusiness.is_converted_to_lead == is_converted_to_lead)
     if rating_min is not None:
         q = q.filter(models.MapsBusiness.rating >= rating_min)
+    if lead_score_min is not None:
+        q = q.filter(models.MapsBusiness.lead_score >= lead_score_min)
+    if ai_validated is not None:
+        if ai_validated:
+            q = q.filter(models.MapsBusiness.ai_type.isnot(None))
+        else:
+            q = q.filter(models.MapsBusiness.ai_type.is_(None))
     if search and search.strip():
         term = f"%{search.strip()}%"
         q = q.filter(
@@ -372,6 +381,18 @@ def query_maps_businesses_paginated(
             nulls_last(desc(models.MapsBusiness.review_count))
             if descending
             else nulls_last(asc(models.MapsBusiness.review_count))
+        )
+    elif sort_key == "lead_score":
+        q = q.order_by(
+            nulls_last(desc(models.MapsBusiness.lead_score))
+            if descending
+            else nulls_last(asc(models.MapsBusiness.lead_score))
+        )
+    elif sort_key == "ai_confidence":
+        q = q.order_by(
+            nulls_last(desc(models.MapsBusiness.ai_confidence))
+            if descending
+            else nulls_last(asc(models.MapsBusiness.ai_confidence))
         )
     elif sort_key == "name":
         q = q.order_by(

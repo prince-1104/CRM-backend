@@ -6,7 +6,11 @@ import json
 from sqlalchemy.orm import Session
 
 import models
-from catalog_categories import PRODUCT_CATALOG_CATEGORIES, validate_catalog_category
+from catalog_categories import (
+    PRODUCT_CATALOG_CATEGORIES,
+    display_category,
+    validate_catalog_category,
+)
 
 CATALOG_EXTRA_KEY = "catalog_categories_extra"
 
@@ -105,16 +109,28 @@ def distinct_product_categories(db: Session) -> list[str]:
 
 
 def list_merged_catalog_categories(db: Session) -> list[str]:
+    """
+    Build one entry per catalogue segment. Normalize extras and DB values through
+    ``display_category`` so legacy labels (e.g. Hotel vs Hotels) do not appear twice.
+    """
     merged: list[str] = list(PRODUCT_CATALOG_CATEGORIES)
     seen = {m.lower() for m in merged}
     for e in get_extra_categories(db):
-        if e.lower() not in seen:
-            merged.append(e)
-            seen.add(e.lower())
+        canon = display_category(e)
+        if not canon:
+            continue
+        k = canon.lower()
+        if k not in seen:
+            merged.append(canon)
+            seen.add(k)
     for p in distinct_product_categories(db):
-        if p.lower() not in seen:
-            merged.append(p)
-            seen.add(p.lower())
+        canon = display_category(p)
+        if not canon:
+            continue
+        k = canon.lower()
+        if k not in seen:
+            merged.append(canon)
+            seen.add(k)
     return sorted(merged, key=str.lower)
 
 
