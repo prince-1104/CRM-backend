@@ -1,10 +1,11 @@
 import os
 import uuid
-from pathlib import Path
+from io import BytesIO
 
 import boto3
 from botocore.client import Config
 from botocore.exceptions import ClientError
+from PIL import Image, UnidentifiedImageError
 
 
 def _required_env(name: str) -> str:
@@ -21,17 +22,51 @@ def _public_base_url(account_id: str) -> str:
     return f"https://pub-{account_id}.r2.dev"
 
 
-def _content_type(filename: str, fallback: str) -> str:
-    ext = Path(filename).suffix.lower()
-    if ext in {".jpg", ".jpeg"}:
-        return "image/jpeg"
-    if ext == ".png":
-        return "image/png"
-    if ext == ".webp":
-        return "image/webp"
-    if ext == ".gif":
-        return "image/gif"
-    return fallback or "application/octet-stream"
+def _int_env(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be > 0")
+    return value
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _optimize_image_to_webp(content: bytes) -> bytes:
+    max_edge = _int_env("CATALOG_IMAGE_MAX_EDGE", 1600)
+    quality = _int_env("CATALOG_IMAGE_WEBP_QUALITY", 80)
+    if quality > 100:
+        raise ValueError("CATALOG_IMAGE_WEBP_QUALITY must be <= 100")
+    lossless = _bool_env("CATALOG_IMAGE_WEBP_LOSSLESS", False)
+
+    try:
+        with Image.open(BytesIO(content)) as img:
+            frame = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+            frame.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+            output = BytesIO()
+            frame.save(
+                output,
+                format="WEBP",
+                quality=quality,
+                optimize=True,
+                method=6,
+                lossless=lossless,
+            )
+            return output.getvalue()
+    except UnidentifiedImageError as exc:
+        raise ValueError("Uploaded file is not a valid image") from exc
+    except OSError as exc:
+        raise ValueError("Failed to process image") from exc
 
 
 def upload_catalog_image(content: bytes, filename: str, content_type: str | None) -> dict[str, str]:
@@ -50,14 +85,14 @@ def upload_catalog_image(content: bytes, filename: str, content_type: str | None
         config=Config(signature_version="s3v4"),
     )
 
-    ext = Path(filename).suffix.lower() or ".bin"
-    key = f"catalog/{uuid.uuid4().hex}{ext}"
-    resolved_content_type = _content_type(filename, content_type or "")
+    optimized = _optimize_image_to_webp(content)
+    key = f"catalog/{uuid.uuid4().hex}.webp"
+    resolved_content_type = "image/webp"
 
     client.put_object(
         Bucket=bucket,
         Key=key,
-        Body=content,
+        Body=optimized,
         ContentType=resolved_content_type,
     )
 
