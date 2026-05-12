@@ -42,43 +42,17 @@ def _bool_env(name: str, default: bool) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
-def _optimize_image_to_webp(content: bytes, *, thumbnail: bool = False) -> bytes:
-    """
-    Convert any uploaded image to WebP with smart quality settings.
-    - Auto-orients via EXIF data (fixes sideways photos from phones)
-    - Downscales to max_edge (1200 px catalog / 300 px thumbnail)
-    - Lossless=False + quality=85 gives excellent visual fidelity at 60-80 % size reduction
-    - method=6 is slowest encode but best compression (runs server-side so no user impact)
-    """
-    if thumbnail:
-        max_edge = _int_env("CATALOG_THUMB_MAX_EDGE", 300)
-        quality = _int_env("CATALOG_THUMB_WEBP_QUALITY", 75)
-    else:
-        max_edge = _int_env("CATALOG_IMAGE_MAX_EDGE", 1200)
-        quality = _int_env("CATALOG_IMAGE_WEBP_QUALITY", 85)
-
+def _optimize_image_to_webp(content: bytes) -> bytes:
+    max_edge = _int_env("CATALOG_IMAGE_MAX_EDGE", 1600)
+    quality = _int_env("CATALOG_IMAGE_WEBP_QUALITY", 80)
     if quality > 100:
         raise ValueError("CATALOG_IMAGE_WEBP_QUALITY must be <= 100")
     lossless = _bool_env("CATALOG_IMAGE_WEBP_LOSSLESS", False)
 
     try:
         with Image.open(BytesIO(content)) as img:
-            # Auto-orient using EXIF data (critical for phone camera uploads)
-            try:
-                from PIL.ImageOps import exif_transpose
-                img = exif_transpose(img)
-            except Exception:
-                pass  # exif_transpose is best-effort
-
-            # Convert palette/RGBA appropriately
-            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
-                frame = img.convert("RGBA")
-            else:
-                frame = img.convert("RGB")
-
-            # Downscale preserving aspect ratio (LANCZOS = best quality)
+            frame = img.convert("RGBA" if "A" in img.getbands() else "RGB")
             frame.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
-
             output = BytesIO()
             frame.save(
                 output,
@@ -88,16 +62,7 @@ def _optimize_image_to_webp(content: bytes, *, thumbnail: bool = False) -> bytes
                 method=6,
                 lossless=lossless,
             )
-            result = output.getvalue()
-
-            # Sanity check: if WebP is larger than original (rare for tiny PNGs), return original
-            if len(result) > len(content) and not lossless:
-                output2 = BytesIO()
-                frame.save(output2, format="WEBP", quality=quality, lossless=True)
-                result2 = output2.getvalue()
-                return result2 if len(result2) < len(result) else result
-
-            return result
+            return output.getvalue()
     except UnidentifiedImageError as exc:
         raise ValueError("Uploaded file is not a valid image") from exc
     except OSError as exc:

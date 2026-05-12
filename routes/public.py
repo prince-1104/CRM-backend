@@ -19,21 +19,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ---------------------------------------------------------------------------
-# Cache-Control helpers
-# ---------------------------------------------------------------------------
-_CDN_SHORT = "public, max-age=60, s-maxage=60, stale-while-revalidate=30"
-_CDN_MEDIA = "public, max-age=604800, s-maxage=604800, immutable"  # 7 days
-
-
-def _cached_json(data, *, cache: str = _CDN_SHORT) -> JSONResponse:
-    """Return a JSONResponse with CDN-friendly cache headers."""
-    import json
-    return JSONResponse(
-        content=data,
-        headers={"Cache-Control": cache},
-    )
-
 
 @router.get("/health")
 def health() -> dict[str, str]:
@@ -91,8 +76,8 @@ def submit_lead(
     )
 
 
-@router.get("/storefront")
-def get_storefront_public(db: Session = Depends(get_db)) -> Response:
+@router.get("/storefront", response_model=schemas.StorefrontPublicResponse)
+def get_storefront_public(db: Session = Depends(get_db)) -> schemas.StorefrontPublicResponse:
     raw = app_settings_service.get_setting_dict(
         db, "business_info", app_settings_service.DEFAULT_BUSINESS_INFO
     )
@@ -101,38 +86,37 @@ def get_storefront_public(db: Session = Depends(get_db)) -> Response:
         v = raw.get(key)
         return str(v).strip() if v is not None else ""
 
-    data = {
-        "business_name": s("business_name"),
-        "phone": s("phone"),
-        "whatsapp": s("whatsapp"),
-        "email": s("email"),
-        "address": s("address"),
-    }
-    return _cached_json(data)
+    return schemas.StorefrontPublicResponse(
+        business_name=s("business_name"),
+        phone=s("phone"),
+        whatsapp=s("whatsapp"),
+        email=s("email"),
+        address=s("address"),
+    )
 
 
 @router.get("/catalog-categories")
-def list_catalog_categories(db: Session = Depends(get_db)) -> Response:
-    data = catalog_category_list_service.list_merged_catalog_categories(db)
-    return _cached_json(data)
+def list_catalog_categories(db: Session = Depends(get_db)) -> list[str]:
+    return catalog_category_list_service.list_merged_catalog_categories(db)
 
 
-@router.get("/catalog/catalogues")
+@router.get(
+    "/catalog/catalogues",
+    response_model=list[schemas.CatalogueCardResponse],
+)
 def list_catalogue_cards_public(
     db: Session = Depends(get_db),
-) -> Response:
+) -> list[schemas.CatalogueCardResponse]:
     rows = catalog_category_profiles_service.list_catalogue_cards(
         db, only_active_products=True
     )
-    data = [schemas.CatalogueCardResponse.model_validate(r).model_dump() for r in rows]
-    return _cached_json(data)
+    return [schemas.CatalogueCardResponse.model_validate(r) for r in rows]
 
 
-@router.get("/products")
-def list_products(db: Session = Depends(get_db)) -> Response:
+@router.get("/products", response_model=list[schemas.CatalogProductResponse])
+def list_products(db: Session = Depends(get_db)) -> list[schemas.CatalogProductResponse]:
     rows = product_service.list_products(db)
-    data = [schemas.CatalogProductResponse.model_validate(r).model_dump() for r in rows]
-    return _cached_json(data)
+    return [schemas.CatalogProductResponse.model_validate(r) for r in rows]
 
 
 @router.get("/catalog/media/{key:path}")
@@ -141,7 +125,6 @@ def get_public_catalog_media(key: str) -> Response:
     Serve catalog images without exposing R2 credentials to the browser.
     Use when the r2.dev / public URL returns 401 (bucket not public).
     """
-    import hashlib
     try:
         body, content_type = r2_storage_service.get_catalog_object(key)
     except ValueError as exc:
@@ -158,15 +141,8 @@ def get_public_catalog_media(key: str) -> Response:
         logger.exception("public catalog media fetch failed")
         raise HTTPException(status_code=500, detail="Failed to load image") from None
 
-    etag = hashlib.md5(body, usedforsecurity=False).hexdigest()
     return Response(
         content=body,
-        media_type=content_type or "image/webp",
-        headers={
-            "Cache-Control": _CDN_MEDIA,
-            "ETag": f'"{etag}"',
-            "Accept-Ranges": "bytes",
-        },
+        media_type=content_type or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=600"},
     )
-
-

@@ -1031,16 +1031,15 @@ async def upload_catalog_image(
     file: UploadFile = File(...),
     _: str = Depends(auth.get_current_admin),
 ) -> schemas.CatalogImageUploadResponse:
-    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"}
+    allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     if file.content_type not in allowed:
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type. Allowed: jpg, png, webp, gif, avif",
+            detail="Unsupported file type. Allowed: jpg, png, webp, gif",
         )
     content = await file.read()
-    # Allow up to 25 MB — server-side WebP conversion reduces to ~200-600 KB
-    if len(content) > 25 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Image must be <= 25 MB")
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be <= 10MB")
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
@@ -1078,17 +1077,10 @@ def get_catalog_media(
         logger.exception("catalog media fetch failed")
         raise HTTPException(status_code=500, detail="Failed to load image") from None
 
-    import hashlib
-    etag = hashlib.md5(body, usedforsecurity=False).hexdigest()
     return Response(
         content=body,
-        media_type=content_type or "image/webp",
-        headers={
-            # Immutable because keys are UUID-based — safe to cache for 1 h in browser
-            "Cache-Control": "private, max-age=3600, immutable",
-            "ETag": f'"{etag}"',
-            "Accept-Ranges": "bytes",
-        },
+        media_type=content_type or "application/octet-stream",
+        headers={"Cache-Control": "private, max-age=300"},
     )
 
 
