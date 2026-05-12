@@ -1,0 +1,82 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud Build — Star Uniform Backend
+# Triggered on every push to `master` via Cloud Build GitHub trigger.
+#
+# What it does:
+#  1. Builds a Docker image using the multi-stage Dockerfile
+#  2. Pushes it to Artifact Registry (asia-south1)
+#  3. Deploys it to Cloud Run in asia-south1
+#
+# Required substitution variables (set in the Cloud Build trigger):
+#   _SERVICE_NAME   — Cloud Run service name  (e.g. staruniform-backend)
+#   _REGION         — GCP region              (e.g. asia-south1)
+#   _REPO           — Artifact Registry repo  (e.g. staruniform)
+# ─────────────────────────────────────────────────────────────────────────────
+
+substitutions:
+  _SERVICE_NAME: staruniform-backend
+  _REGION: asia-south1
+  _REPO: staruniform
+  # Artifact Registry image path
+  _IMAGE: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/${_SERVICE_NAME}
+
+steps:
+  # ── Step 1: Build the Docker image ─────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: build
+    args:
+      - build
+      - "--tag=${_IMAGE}:${SHORT_SHA}"
+      - "--tag=${_IMAGE}:latest"
+      - "--cache-from=${_IMAGE}:latest"
+      - "--build-arg=BUILDKIT_INLINE_CACHE=1"
+      - "."
+    env:
+      - "DOCKER_BUILDKIT=1"
+
+  # ── Step 2: Push both tags ──────────────────────────────────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: push
+    args:
+      - push
+      - "--all-tags"
+      - "${_IMAGE}"
+    waitFor: [build]
+
+  # ── Step 3: Deploy to Cloud Run ─────────────────────────────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: deploy
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_SERVICE_NAME}"
+      - "--image=${_IMAGE}:${SHORT_SHA}"
+      - "--region=${_REGION}"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      # Cloud Run scales to 0 when idle (cost-saving for low traffic)
+      - "--min-instances=0"
+      - "--max-instances=3"
+      # 512 MB RAM is comfortable for FastAPI + SQLAlchemy + PIL
+      - "--memory=512Mi"
+      - "--cpu=1"
+      # 60-second request timeout (scrape endpoints can be slow)
+      - "--timeout=60"
+      # Concurrency 80 is Cloud Run default; safe for FastAPI async
+      - "--concurrency=80"
+      # Health check path
+      - "--set-env-vars=PORT=8080"
+    waitFor: [push]
+
+# Store the image in Artifact Registry
+images:
+  - "${_IMAGE}:${SHORT_SHA}"
+  - "${_IMAGE}:latest"
+
+options:
+  # Use a faster machine type for builds
+  machineType: "E2_HIGHCPU_8"
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: "1200s"
