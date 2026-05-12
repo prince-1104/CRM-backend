@@ -34,13 +34,18 @@ REGIONS: dict[str, dict[str, float]] = {
     "Chennai": {"lat": 13.0827, "lng": 80.2707},
 }
 
-# UI categories -> Google Places single-type filter
-CATEGORY_TO_PLACE_TYPE: dict[str, str] = {
+# UI categories -> Google Places single-type filter (None = keyword-only, no type restriction)
+CATEGORY_TO_PLACE_TYPE: dict[str, str | None] = {
     "restaurants": "restaurant",
     "lodging": "lodging",
     "bar": "bar",
     "cafe": "cafe",
-    "catering": "catering",
+    "catering": None,
+}
+
+# Categories that use keyword search (required when place_type is None)
+CATEGORY_TO_KEYWORD: dict[str, str] = {
+    "catering": "catering caterer",
 }
 
 
@@ -75,8 +80,7 @@ async def search_businesses_by_region(
         raise GoogleMapsAPIError(f"Unknown region: {region}")
 
     cat_key = category.strip().lower()
-    place_type = CATEGORY_TO_PLACE_TYPE.get(cat_key)
-    if not place_type:
+    if cat_key not in CATEGORY_TO_PLACE_TYPE:
         raise GoogleMapsAPIError(f"Unsupported category: {category}")
 
     coords = REGIONS[region_key]
@@ -111,9 +115,14 @@ async def search_businesses_by_location(
         raise GoogleMapsAPIError("GOOGLE_MAPS_API_KEY is not configured")
 
     cat_key = category.strip().lower()
-    place_type = CATEGORY_TO_PLACE_TYPE.get(cat_key)
-    if not place_type:
+    if cat_key not in CATEGORY_TO_PLACE_TYPE:
         raise GoogleMapsAPIError(f"Unsupported category: {category}")
+
+    place_type = CATEGORY_TO_PLACE_TYPE[cat_key]
+    keyword = CATEGORY_TO_KEYWORD.get(cat_key)
+
+    if not place_type and not keyword:
+        raise GoogleMapsAPIError(f"Category {category} needs a type or keyword")
 
     aggregated: list[dict[str, Any]] = []
     next_page_token: str | None = None
@@ -124,9 +133,12 @@ async def search_businesses_by_location(
             params: dict[str, Any] = {
                 "location": location,
                 "radius": int(max(1, radius_m)),
-                "type": place_type,
                 "key": GOOGLE_MAPS_API_KEY,
             }
+            if place_type:
+                params["type"] = place_type
+            if keyword:
+                params["keyword"] = keyword
             if next_page_token:
                 params["pagetoken"] = next_page_token
 

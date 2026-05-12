@@ -1,0 +1,13 @@
+.git
+.github
+frontend
+admin
+**/.next
+**/node_modules
+**/__pycache__
+**/.venv
+**/*.pyc
+*.db
+.env
+.env.*
+!.env.example

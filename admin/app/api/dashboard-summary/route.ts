@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 const COOKIE_NAME = "admin_token";
 
 function backendBase(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5050";
 }
 
 /** One browser request: lead stats, maps stats, recent leads (parallel on server). */

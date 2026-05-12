@@ -255,6 +255,45 @@ export default function LeadsPage() {
     }
   }
 
+  async function deleteLead(id: number) {
+    if (!confirm(`Delete lead #${id}? This cannot be undone.`)) return;
+    setMessage(null);
+    const res = await fetch("/api/admin-proxy/leads/bulk-delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: [id] }),
+    });
+    if (!res.ok) {
+      setMessage("Delete failed.");
+      return;
+    }
+    setMessage(`Lead #${id} deleted.`);
+    await loadPage();
+  }
+
+  async function bulkDeleteLeads() {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} selected lead(s)? This cannot be undone.`)) return;
+    setBulkWorking(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin-proxy/leads/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_ids: ids }),
+      });
+      if (!res.ok) {
+        setMessage("Bulk delete failed.");
+        return;
+      }
+      setMessage(`Deleted ${ids.length} lead(s).`);
+      await loadPage();
+    } finally {
+      setBulkWorking(false);
+    }
+  }
+
   async function exportCsv() {
     const res = await fetch("/api/admin-proxy/leads/export/csv", {
       cache: "no-store",
@@ -407,6 +446,14 @@ export default function LeadsPage() {
         >
           {bulkWorking ? "Applying…" : `Set status (${selected.size} selected)`}
         </button>
+        <button
+          type="button"
+          disabled={bulkWorking || selected.size === 0}
+          onClick={() => void bulkDeleteLeads()}
+          className="rounded-lg bg-red-700 px-3 py-2 text-sm text-white hover:bg-red-600 disabled:opacity-50"
+        >
+          {bulkWorking ? "Working…" : `Delete selected (${selected.size})`}
+        </button>
       </div>
 
       {loading ? (
@@ -476,13 +523,22 @@ export default function LeadsPage() {
                     {formatDateTimeDdMmYyyy(l.created_at)}
                   </td>
                   <td className="px-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() => openEdit(l)}
-                      className="rounded bg-slate-800 px-2 py-1 text-xs text-white hover:bg-slate-700"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(l)}
+                        className="rounded bg-slate-800 px-2 py-1 text-xs text-white hover:bg-slate-700"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteLead(l.id)}
+                        className="rounded bg-red-900/60 px-2 py-1 text-xs text-red-300 hover:bg-red-800"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

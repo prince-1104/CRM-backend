@@ -693,7 +693,25 @@ function ProductsPageInner() {
             </div>
           </div>
           {loading ? (
-            <p className="mt-4 text-on-surface-variant">Loading…</p>
+            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div key={i} className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low/20">
+                  <div className="aspect-[4/3] w-full animate-pulse bg-surface-container-high" />
+                  <div className="space-y-2 p-4">
+                    <div className="h-2 w-16 animate-pulse rounded bg-surface-container-high" />
+                    <div className="h-4 w-32 animate-pulse rounded bg-surface-container-high" />
+                    <div className="flex gap-2">
+                      <div className="h-5 w-20 animate-pulse rounded-md bg-surface-container-high" />
+                      <div className="h-5 w-12 animate-pulse rounded-md bg-surface-container-high" />
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <div className="h-6 w-12 animate-pulse rounded-lg bg-surface-container-high" />
+                      <div className="h-6 w-14 animate-pulse rounded-lg bg-surface-container-high" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : error ? (
             <p className="mt-4 text-error">{error}</p>
           ) : (
@@ -908,15 +926,32 @@ function ProductsPageInner() {
   );
 }
 
+function ProductsPageSkeleton() {
+  return (
+    <div>
+      <div className="mb-10 space-y-3">
+        <div className="h-10 w-64 animate-pulse rounded-xl bg-surface-container-high" />
+        <div className="h-4 w-96 animate-pulse rounded bg-surface-container-high" />
+      </div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+          <div key={i} className="overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-low/20">
+            <div className="aspect-[4/3] w-full animate-pulse bg-surface-container-high" />
+            <div className="space-y-2 p-4">
+              <div className="h-2 w-16 animate-pulse rounded bg-surface-container-high" />
+              <div className="h-4 w-32 animate-pulse rounded bg-surface-container-high" />
+              <div className="h-5 w-20 animate-pulse rounded-md bg-surface-container-high" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ProductsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-[40vh] items-center justify-center text-on-surface-variant">
-          Loading…
-        </div>
-      }
-    >
+    <Suspense fallback={<ProductsPageSkeleton />}>
       <ProductsPageInner />
     </Suspense>
   );

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 function backendBase(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5050";
 }
 
 export async function GET() {

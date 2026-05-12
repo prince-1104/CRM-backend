@@ -72,8 +72,52 @@ export default function DashboardLayout({
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-on-surface-variant">
-        Loading…
+      <div className="min-h-screen bg-surface">
+        {/* Skeleton top nav */}
+        <div className="fixed top-0 z-50 flex h-20 w-full items-center justify-between border-b border-outline-variant/20 bg-[#0b0e14]/80 px-4 md:px-8">
+          <div className="h-6 w-32 animate-pulse rounded-lg bg-surface-container-high" />
+          <div className="hidden gap-6 md:flex">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-4 w-16 animate-pulse rounded bg-surface-container-high" />
+            ))}
+          </div>
+          <div className="h-4 w-24 animate-pulse rounded bg-surface-container-high" />
+        </div>
+        {/* Skeleton sidebar */}
+        <aside className="fixed left-0 top-0 hidden h-full w-64 flex-col border-r border-outline-variant/10 bg-[#0b0e14] pt-24 lg:flex">
+          <div className="px-4 pb-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 animate-pulse rounded-xl bg-surface-container-high" />
+              <div className="space-y-1">
+                <div className="h-4 w-16 animate-pulse rounded bg-surface-container-high" />
+                <div className="h-2 w-24 animate-pulse rounded bg-surface-container-high" />
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 px-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl px-4 py-3">
+                <div className="h-5 w-5 animate-pulse rounded bg-surface-container-high" />
+                <div className="h-3 w-24 animate-pulse rounded bg-surface-container-high" />
+              </div>
+            ))}
+          </div>
+        </aside>
+        {/* Skeleton content area */}
+        <main className="min-h-screen bg-surface pb-20 pt-24 lg:pl-64">
+          <div className="mx-auto max-w-[1600px] space-y-8 px-4 md:px-8">
+            <div className="space-y-3">
+              <div className="h-8 w-64 animate-pulse rounded-xl bg-surface-container-high" />
+              <div className="h-4 w-96 animate-pulse rounded bg-surface-container-high" />
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-32 animate-pulse rounded-2xl bg-surface-container-high" />
+              ))}
+            </div>
+            <div className="h-64 animate-pulse rounded-2xl bg-surface-container-high" />
+          </div>
+        </main>
       </div>
     );
   }
