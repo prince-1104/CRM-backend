@@ -144,5 +144,5 @@ def get_public_catalog_media(key: str) -> Response:
     return Response(
         content=body,
         media_type=content_type or "application/octet-stream",
-        headers={"Cache-Control": "public, max-age=600"},
+        headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"},
     )
