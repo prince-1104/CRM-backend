@@ -14,7 +14,7 @@ import models
 logger = logging.getLogger(__name__)
 
 # Default model for Gemini generation. Can be overridden with `GEMINI_MODEL_ID`.
-MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-1.5-flash-latest")
+MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-2.0-flash")
 BATCH_SIZE = 20
 AI_CACHE_DAYS = 7
 MAX_BULK_ROWS = 200
@@ -86,7 +86,7 @@ def pre_filter(business: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 
 _CATEGORY_ALLOWED_TYPES: dict[str, set[str]] = {
-    "catering": {"restaurant", "meal_takeaway", "meal_delivery", "cafe", "bar"},
+    "catering": {"restaurant", "meal_takeaway", "meal_delivery", "food", "cafe", "bar"},
     "restaurants": {"restaurant", "meal_takeaway", "meal_delivery", "food", "cafe"},
     "lodging": {"lodging"},
     "hotel": {"lodging"},
@@ -127,27 +127,25 @@ _TYPE_HARD_REJECT: set[str] = {
 
 
 def strict_type_filter(business: dict[str, Any], category: str) -> bool:
-    """Return False if Google's own types indicate the business is irrelevant.
-    This is the strongest pre-AI signal we have."""
+    """Reject only when Google's types give strong negative signal.
+    Does NOT require a positive type match — AI handles ambiguous cases."""
     google_types = set(business.get("types") or [])
     if not google_types:
+        return True
+
+    cat_key = category.strip().lower()
+    allowed = _CATEGORY_ALLOWED_TYPES.get(cat_key)
+
+    if allowed and (google_types & allowed):
         return True
 
     if google_types & _TYPE_HARD_REJECT:
         return False
 
-    cat_key = category.strip().lower()
     if cat_key == "catering" and (google_types & _CATERING_BLOCKED_TYPES):
         return False
 
-    allowed = _CATEGORY_ALLOWED_TYPES.get(cat_key)
-
-    if allowed is None:
-        return True
-    if not allowed:
-        return True
-
-    return bool(google_types & allowed)
+    return True
 
 
 # ---------------------------------------------------------------------------
