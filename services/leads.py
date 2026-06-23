@@ -21,26 +21,63 @@ def validate_phone(phone: str) -> str:
     return cleaned
 
 
-def create_website_form_lead(db: Session, name: str, phone: str) -> models.Lead:
+def create_website_form_lead(
+    db: Session,
+    name: str,
+    phone: str,
+    *,
+    email: str | None = None,
+    business_name: str | None = None,
+    category: str | None = None,
+    notes: str | None = None,
+    source: str = "website_form",
+) -> models.Lead:
     phone_value = validate_phone(phone)
+    name_value = name.strip()
+    email_value = email.strip() if email and email.strip() else None
+    business_value = business_name.strip() if business_name and business_name.strip() else None
+    category_value = category.strip() if category and category.strip() else None
+    notes_value = notes.strip() if notes and notes.strip() else None
+
+    existing = db.query(models.Lead).filter(models.Lead.phone == phone_value).first()
+    if existing:
+        existing.name = name_value or existing.name
+        if email_value:
+            existing.email = email_value
+        if business_value:
+            existing.business_name = business_value
+        if category_value:
+            existing.category = category_value
+        if notes_value:
+            stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            prior = (existing.notes or "").strip()
+            entry = f"[{stamp}] {notes_value}"
+            existing.notes = f"{prior}\n\n{entry}".strip() if prior else entry
+        if source and source != "website_form":
+            existing.source = source
+        existing.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     lead = models.Lead(
-        name=name.strip(),
+        name=name_value,
         phone=phone_value,
-        source="website_form",
+        source=source,
         status="new",
-        notes=None,
+        notes=notes_value,
         called_date=None,
         called_by=None,
         interested=None,
         conversation_details=None,
-        business_name=None,
+        business_name=business_value,
         address=None,
         website=None,
         rating=None,
         review_count=None,
-        category=None,
+        category=category_value,
         region=None,
-        email=None,
+        email=email_value,
         last_contacted=None,
         next_follow_up_at=None,
     )

@@ -36,6 +36,19 @@ def submit_lead(
     """
     name = (payload.get("name") or payload.get("full_name") or "").strip()
     phone_raw = payload.get("phone")
+    email = (payload.get("email") or "").strip() or None
+    company = (payload.get("company") or payload.get("business_name") or "").strip() or None
+    category = (payload.get("category") or "").strip() or None
+    quantity = (payload.get("quantity") or "").strip() or None
+    requirement = (payload.get("requirement") or "").strip() or None
+    source = (payload.get("source") or "website_form").strip() or "website_form"
+
+    note_parts: list[str] = []
+    if requirement:
+        note_parts.append(f"Requirement: {requirement}")
+    if quantity:
+        note_parts.append(f"Quantity: {quantity}")
+    notes = "\n".join(note_parts) if note_parts else None
 
     if not name or len(name) < 2:
         return JSONResponse(
@@ -50,7 +63,16 @@ def submit_lead(
         )
 
     try:
-        lead = lead_service.create_website_form_lead(db, name=name, phone=str(phone_raw))
+        lead = lead_service.create_website_form_lead(
+            db,
+            name=name,
+            phone=str(phone_raw),
+            email=email,
+            business_name=company,
+            category=category,
+            notes=notes,
+            source=source,
+        )
     except ValueError as exc:
         return JSONResponse(
             status_code=400,
